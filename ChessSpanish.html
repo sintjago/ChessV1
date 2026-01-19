@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Ajedrez</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f9f9f9;
+      color: #222;
+      margin: 0;
+      padding: 20px;
+      text-align: center;
+    }
+
+    h1 {
+      margin-bottom: 10px;
+    }
+
+    .top-controls {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 20px;
+      margin-bottom: 20px;
+    }
+
+    .clock-box {
+      background: #fff;
+      border: 1px solid #ccc;
+      padding: 10px 15px;
+      border-radius: 8px;
+      box-shadow: 0 0 5px rgba(0,0,0,0.1);
+    }
+
+    .clock-label {
+      font-weight: bold;
+    }
+
+    .clock-time {
+      font-size: 18px;
+      margin: 5px 0;
+    }
+
+    .btn-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    button {
+      padding: 6px 12px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    .game-container {
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      margin-bottom: 20px;
+    }
+
+    .board-column {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .board-row {
+      display: flex;
+      flex-direction: row;
+    }
+
+    .rank-labels {
+      display: grid;
+      grid-template-rows: repeat(8, 60px);
+      margin-right: 5px;
+      font-size: 16px;
+      font-weight: bold;
+      justify-items: center;
+      align-items: center;
+    }
+
+    .file-labels {
+      display: grid;
+      grid-template-columns: repeat(8, 60px);
+      font-size: 16px;
+      font-weight: bold;
+      margin-top: 5px;
+      justify-items: center;
+    }
+
+    canvas {
+      border: 2px solid #333;
+    }
+
+    #instructions {
+      font-size: 16px;
+      margin-bottom: 10px;
+    }
+
+    #status {
+      font-weight: bold;
+      font-size: 16px;
+      color: #444;
+      margin-top: 10px;
+    }
+
+    table {
+      margin: 20px auto;
+      border-collapse: collapse;
+      width: 300px;
+      font-size: 14px;
+    }
+
+    th, td {
+      border: 1px solid #444;
+      padding: 6px 8px;
+      text-align: center;
+    }
+
+    #promotionMenu {
+      position: absolute;
+      display: none;
+      background: #fff;
+      border: 1px solid #333;
+      padding: 5px;
+      z-index: 10;
+      box-shadow: 0 0 6px rgba(0,0,0,0.2);
+    }
+
+    #promotionMenu button {
+      display: block;
+      width: 100%;
+      padding: 5px;
+      margin: 4px 0;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Ajedrez</h1>
+
+  <div class="top-controls">
+    <div class="clock-box">
+      <div class="clock-label">Tiempo Blanco</div>
+      <input type="number" id="whiteTime" value="300" style="width: 60px;"> seg
+      <div id="whiteClock" class="clock-time">05:00</div>
+    </div>
+
+    <div class="btn-group">
+      <button onclick="undoMove()">Deshacer</button>
+      <button onclick="toggleSound()" id="soundToggle">🔊 Sonido Activado</button>
+      <button onclick="newGame()">Nuevo Juego</button>
+    </div>
+
+    <div class="clock-box">
+      <div class="clock-label">Tiempo Negro</div>
+      <input type="number" id="blackTime" value="300" style="width: 60px;"> seg
+      <div id="blackClock" class="clock-time">05:00</div>
+    </div>
+  </div>
+
+  <div class="game-container">
+    <div class="board-column">
+      <div class="board-row">
+        <div class="rank-labels">
+          <div>8</div><div>7</div><div>6</div><div>5</div>
+          <div>4</div><div>3</div><div>2</div><div>1</div>
+        </div>
+        <canvas id="chessboard" width="480" height="480"></canvas>
+      </div>
+      <div class="file-labels">
+        <div>A</div><div>B</div><div>C</div><div>D</div>
+        <div>E</div><div>F</div><div>G</div><div>H</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="instructions">Arrastra una pieza para comenzar la partida. Blanco mueve primero.</div>
+  <div id="status"></div>
+
+  <table>
+    <thead>
+      <tr><th>#</th><th>Blanco</th><th>Negro</th></tr>
+    </thead>
+    <tbody id="moveList"></tbody>
+  </table>
+
+  <div id="promotionMenu">
+    <button onclick="promote('q')">Reina</button>
+    <button onclick="promote('r')">Torre</button>
+    <button onclick="promote('b')">Alfil</button>
+    <button onclick="promote('n')">Caballo</button>
+  </div>
+
+<script>
+const canvas = document.getElementById("chessboard");
+const ctx = canvas.getContext("2d");
+const squareSize = canvas.width / 8;
+const moveList = document.getElementById("moveList");
+const status = document.getElementById("status");
+const whiteClock = document.getElementById("whiteClock");
+const blackClock = document.getElementById("blackClock");
+const whiteInput = document.getElementById("whiteTime");
+const blackInput = document.getElementById("blackTime");
+const promotionMenu = document.getElementById("promotionMenu");
+const soundToggle = document.getElementById("soundToggle");
+
+const pieces = {
+  "r": "♜", "n": "♞", "b": "♝", "q": "♛", "k": "♚", "p": "♟",
+  "R": "♖", "N": "♘", "B": "♗", "Q": "♕", "K": "♔", "P": "♙"
+};
+
+const names = {
+  p: "Peón", r: "Torre", n: "Caballo",
+  b: "Alfil", q: "Reina", k: "Rey"
+};
+
+let board, whiteToMove, selectedPiece, dragging, dragFrom, legalMoves, moveHistory, soundOn, whiteTime, blackTime, clockInterval, castlingRights, pendingPromotion, gameStarted;
+
+function newGame() {
+  board = [
+    ["r","n","b","q","k","b","n","r"],
+    ["p","p","p","p","p","p","p","p"],
+    ["","","","","","","",""],
+    ["","","","","","","",""],
+    ["","","","","","","",""],
+    ["","","","","","","",""],
+    ["P","P","P","P","P","P","P","P"],
+    ["R","N","B","Q","K","B","N","R"]
+  ];
+  whiteToMove = true;
+  selectedPiece = null;
+  dragging = false;
+  dragFrom = null;
+  legalMoves = [];
+  moveHistory = [];
+  soundOn = true;
+  gameStarted = false;
+  castlingRights = {
+    whiteKingMoved: false, blackKingMoved: false,
+    whiteRookA: false, whiteRookH: false,
+    blackRookA: false, blackRookH: false
+  };
+  pendingPromotion = null;
+  whiteTime = parseInt(whiteInput.value) || 300;
+  blackTime = parseInt(blackInput.value) || 300;
+  whiteClock.textContent = formatTime(whiteTime);
+  blackClock.textContent = formatTime(blackTime);
+  moveList.innerHTML = "";
+  status.textContent = "";
+  clearInterval(clockInterval);
+  drawBoard();
+}
+newGame();
+
+function drawBoard() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      ctx.fillStyle = (r + c) % 2 === 0 ? '#f0d9b5' : '#b58863';
+      ctx.fillRect(c * squareSize, r * squareSize, squareSize, squareSize);
+      if (legalMoves.some(m => m[0] === r && m[1] === c)) {
+        ctx.fillStyle = "rgba(0,255,0,0.3)";
+        ctx.fillRect(c * squareSize, r * squareSize, squareSize, squareSize);
+      }
+      const piece = board[r][c];
+      if (piece) {
+        ctx.fillStyle = piece === piece.toUpperCase() ? '#FFF' : '#000';
+        ctx.font = `${squareSize - 10}px serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(pieces[piece], (c + 0.5) * squareSize, (r + 0.5) * squareSize);
+      }
+    }
+  }
+}
+
+function formatTime(sec) {
+  return `${String(Math.floor(sec / 60)).padStart(2, "0")}:${String(sec % 60).padStart(2, "0")}`;
+}
+
+function updateClocks() {
+  if (whiteToMove) whiteTime--; else blackTime--;
+  whiteClock.textContent = formatTime(whiteTime);
+  blackClock.textContent = formatTime(blackTime);
+}
+
+function startClock() {
+  clearInterval(clockInterval);
+  clockInterval = setInterval(updateClocks, 1000);
+}
+
+function toggleSound() {
+  soundOn = !soundOn;
+  soundToggle.textContent = soundOn ? "🔊 Sonido Activado" : "🔇 Sonido Desactivado";
+}
+
+function sayMove(piece, col, row) {
+  if (!soundOn) return;
+  const synth = window.speechSynthesis;
+  synth.cancel();
+  const nombre = names[piece.toLowerCase()] || "Pieza";
+  const letra = String.fromCharCode(65 + col);
+  const numero = 8 - row;
+  const utter = new SpeechSynthesisUtterance(`${nombre} a ${letra}${numero}`);
+  utter.lang = "es-ES";
+  setTimeout(() => synth.speak(utter), 150);
+}
+
+function addMoveToList(fr, fc, tr, tc) {
+  const moveText = `${String.fromCharCode(65 + fc)}${8 - fr} - ${String.fromCharCode(65 + tc)}${8 - tr}`;
+  if (whiteToMove) {
+    const row = document.createElement("tr");
+    row.innerHTML = `<td>${moveList.rows.length + 1}</td><td>${moveText}</td><td></td>`;
+    moveList.appendChild(row);
+  } else {
+    moveList.rows[moveList.rows.length - 1].cells[2].textContent = moveText;
+  }
+}
+
+function undoMove() {
+  if (moveHistory.length > 0) {
+    const { prevBoard, prevRights, prevTime } = moveHistory.pop();
+    board = prevBoard.map(r => [...r]);
+    Object.assign(castlingRights, prevRights);
+    [whiteTime, blackTime] = prevTime;
+    whiteToMove = !whiteToMove;
+    moveList.deleteRow(moveList.rows.length - (whiteToMove ? 1 : 0));
+    status.textContent = "";
+    drawBoard();
+    startClock();
+  }
+}
+
+function promote(type) {
+  if (!pendingPromotion) return;
+  const { row, col, isWhite } = pendingPromotion;
+  board[row][col] = isWhite ? type.toUpperCase() : type.toLowerCase();
+  pendingPromotion = null;
+  promotionMenu.style.display = "none";
+  whiteToMove = !whiteToMove;
+  drawBoard();
+  startClock();
+}
+
+canvas.addEventListener("mousedown", e => {
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left, y = e.clientY - rect.top;
+  const row = Math.floor(y / squareSize), col = Math.floor(x / squareSize);
+  const piece = board[row][col];
+  if (piece && ((whiteToMove && piece === piece.toUpperCase()) || (!whiteToMove && piece === piece.toLowerCase()))) {
+    selectedPiece = piece;
+    dragging = true;
+    dragFrom = [row, col];
+    legalMoves = getLegalMoves(row, col);
+    drawBoard();
+  }
+});
+
+canvas.addEventListener("mouseup", e => {
+  if (!dragging || !selectedPiece) return;
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left, y = e.clientY - rect.top;
+  const row = Math.floor(y / squareSize), col = Math.floor(x / squareSize);
+  const [fromRow, fromCol] = dragFrom;
+
+  if (legalMoves.some(m => m[0] === row && m[1] === col)) {
+    moveHistory.push({
+      prevBoard: board.map(r => [...r]),
+      prevRights: { ...castlingRights },
+      prevTime: [whiteTime, blackTime]
+    });
+
+    const movedPiece = board[fromRow][fromCol];
+    board[row][col] = movedPiece;
+    board[fromRow][fromCol] = "";
+
+    if (movedPiece.toLowerCase() === "k" && Math.abs(col - fromCol) === 2) {
+      if (col === 6) board[row][5] = board[row][7], board[row][7] = "";
+      if (col === 2) board[row][3] = board[row][0], board[row][0] = "";
+    }
+
+    if (movedPiece === "K") castlingRights.whiteKingMoved = true;
+    if (movedPiece === "k") castlingRights.blackKingMoved = true;
+    if (fromCol === 0 && fromRow === 7 && movedPiece === "R") castlingRights.whiteRookA = true;
+    if (fromCol === 7 && fromRow === 7 && movedPiece === "R") castlingRights.whiteRookH = true;
+    if (fromCol === 0 && fromRow === 0 && movedPiece === "r") castlingRights.blackRookA = true;
+    if (fromCol === 7 && fromRow === 0 && movedPiece === "r") castlingRights.blackRookH = true;
+
+    sayMove(movedPiece, col, row);
+    addMoveToList(fromRow, fromCol, row, col);
+
+    if (movedPiece.toLowerCase() === "p" && (row === 0 || row === 7)) {
+      pendingPromotion = { row, col, isWhite: movedPiece === movedPiece.toUpperCase() };
+      const left = canvas.offsetLeft + col * squareSize;
+      const top = canvas.offsetTop + row * squareSize;
+      promotionMenu.style.left = `${left}px`;
+      promotionMenu.style.top = `${top}px`;
+      promotionMenu.style.display = "block";
+      return;
+    }
+
+    whiteToMove = !whiteToMove;
+
+    if (!gameStarted) {
+      startClock();
+      gameStarted = true;
+    }
+
+    const currentColor = whiteToMove;
+    if (isInCheck(currentColor)) {
+      if (!hasLegalMoves(currentColor)) {
+        status.textContent = currentColor ? "¡Jaque mate! Ganan las negras." : "¡Jaque mate! Ganan las blancas.";
+        clearInterval(clockInterval);
+      } else {
+        status.textContent = "¡Jaque!";
+      }
+    } else {
+      if (!hasLegalMoves(currentColor)) {
+        status.textContent = "¡Empate por ahogado!";
+        clearInterval(clockInterval);
+      } else {
+        status.textContent = "";
+      }
+    }
+  }
+
+  selectedPiece = null;
+  dragging = false;
+  legalMoves = [];
+  drawBoard();
+});
+
+function isInCheck(isWhite) {
+  const kingSymbol = isWhite ? "K" : "k";
+  let kingPos;
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      if (board[r][c] === kingSymbol) {
+        kingPos = [r, c];
+        break;
+      }
+    }
+  }
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const piece = board[r][c];
+      if (piece && (isWhite !== (piece === piece.toUpperCase()))) {
+        const moves = getLegalMoves(r, c, true);
+        for (let [mr, mc] of moves) {
+          if (mr === kingPos[0] && mc === kingPos[1]) {
+            return true;
+          }
+        }
+      }
+    }
+  }
+  return false;
+}
+
+function hasLegalMoves(isWhite) {
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const piece = board[r][c];
+      if (piece && (isWhite === (piece === piece.toUpperCase()))) {
+        const moves = getLegalMoves(r, c);
+        if (moves.length > 0) return true;
+      }
+    }
+  }
+  return false;
+}
+
+function getLegalMoves(r, c, skipCheckTest = false) {
+  const piece = board[r][c];
+  if (!piece) return [];
+  const isWhite = piece === piece.toUpperCase();
+  const moves = [];
+  const add = (nr, nc) => {
+    if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
+      const target = board[nr][nc];
+      if (!target || (isWhite !== (target === target.toUpperCase())))
+        moves.push([nr, nc]);
+    }
+  };
+
+  switch (piece.toLowerCase()) {
+    case 'p': {
+      const dir = isWhite ? -1 : 1;
+      const start = isWhite ? 6 : 1;
+      if (!board[r + dir][c]) {
+        moves.push([r + dir, c]);
+        if (r === start && !board[r + 2 * dir][c]) moves.push([r + 2 * dir, c]);
+      }
+      [-1, 1].forEach(dc => {
+        const nr = r + dir, nc = c + dc;
+        if (nr >= 0 && nc >= 0 && nc < 8 && board[nr][nc] &&
+            isWhite !== (board[nr][nc] === board[nr][nc].toUpperCase()))
+          moves.push([nr, nc]);
+      });
+      break;
+    }
+    case 'r': case 'b': case 'q':
+      const vectors = {
+        r: [[-1,0],[1,0],[0,-1],[0,1]],
+        b: [[-1,-1],[-1,1],[1,-1],[1,1]],
+        q: [[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[-1,1],[1,-1],[1,1]]
+      }[piece.toLowerCase()];
+      for (let [dr, dc] of vectors) {
+        for (let i = 1; i < 8; i++) {
+          const nr = r + dr*i, nc = c + dc*i;
+          if (nr < 0 || nr >= 8 || nc < 0 || nc >= 8) break;
+          if (!board[nr][nc]) moves.push([nr, nc]);
+          else {
+            if (isWhite !== (board[nr][nc] === board[nr][nc].toUpperCase())) moves.push([nr, nc]);
+            break;
+          }
+        }
+      } break;
+    case 'n': [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]].forEach(([dr,dc]) => add(r + dr, c + dc)); break;
+    case 'k': {
+      [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]].forEach(([dr,dc]) => add(r + dr, c + dc));
+      if (isWhite && !castlingRights.whiteKingMoved) {
+        if (!castlingRights.whiteRookH && !board[7][5] && !board[7][6]) moves.push([7, 6]);
+        if (!castlingRights.whiteRookA && !board[7][1] && !board[7][2] && !board[7][3]) moves.push([7, 2]);
+      }
+      if (!isWhite && !castlingRights.blackKingMoved) {
+        if (!castlingRights.blackRookH && !board[0][5] && !board[0][6]) moves.push([0, 6]);
+        if (!castlingRights.blackRookA && !board[0][1] && !board[0][2] && !board[0][3]) moves.push([0, 2]);
+      }
+      break;
+    }
+  }
+
+  if (!skipCheckTest) {
+    const filtered = [];
+    for (let [nr, nc] of moves) {
+      const backup = board.map(row => [...row]);
+      const temp = board[nr][nc];
+      board[nr][nc] = board[r][c];
+      board[r][c] = "";
+      const inCheck = isInCheck(isWhite);
+      board[r][c] = board[nr][nc];
+      board[nr][nc] = temp;
+      if (!inCheck) filtered.push([nr, nc]);
+    }
+    return filtered;
+  }
+
+  return moves;
+}
+
+whiteInput.addEventListener("change", () => {
+  whiteTime = parseInt(whiteInput.value);
+  whiteClock.textContent = formatTime(whiteTime);
+});
+blackInput.addEventListener("change", () => {
+  blackTime = parseInt(blackInput.value);
+  blackClock.textContent = formatTime(blackTime);
+});
+</script>
+
+
+<!-- Resto del <script> con la lógica completa del juego va aquí sin traducción, ya que ya fue publicado -->
+</body>
+</html>
